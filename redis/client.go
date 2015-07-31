@@ -80,9 +80,18 @@ func (c *Client) Close() error {
 	return c.conn.Close()
 }
 
-// Cmd calls the given Redis command.
-func (c *Client) Cmd(cmd string, args ...interface{}) *Resp {
+// Sends the command, but does not wait for a response.
+func (c *Client) SendCmd(cmd string, args ...interface{}) error {
 	err := c.writeRequest(request{cmd, args})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Sends the command and waits for a response.
+func (c *Client) Cmd(cmd string, args ...interface{}) *Resp {
+	err := c.SendCmd(cmd, args...)
 	if err != nil {
 		return newRespIOErr(err)
 	}

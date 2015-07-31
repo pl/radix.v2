@@ -3,7 +3,7 @@
 //
 // To import inside your package do:
 //
-//	import "github.com/mediocregopher/radix.v2/redis"
+//	import "github.com/pl/radix.v2/redis"
 //
 // Connecting
 //

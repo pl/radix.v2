@@ -53,9 +53,9 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/mediocregopher/radix.v2/pool"
-	"github.com/mediocregopher/radix.v2/pubsub"
-	"github.com/mediocregopher/radix.v2/redis"
+	"github.com/pl/radix.v2/pool"
+	"github.com/pl/radix.v2/pubsub"
+	"github.com/pl/radix.v2/redis"
 )
 
 // ClientError is an error wrapper returned by operations in this package. It
@@ -146,7 +146,11 @@ func NewClient(
 	}
 
 	subClient := pubsub.NewSubClient(client)
-	r := subClient.Subscribe("+switch-master")
+	subSendErr := subClient.Subscribe("+switch-master")
+	if subSendErr != nil {
+		return nil, &ClientError{err: subSendErr, SentinelErr: true}
+	}
+	r := client.ReadResp()
 	if r.Err != nil {
 		return nil, &ClientError{err: r.Err, SentinelErr: true}
 	}

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/mediocregopher/radix.v2/redis"
+	"github.com/pl/radix.v2/redis"
 )
 
 // SubRespType describes the type of the response  being returned from one of
@@ -55,23 +55,23 @@ func NewSubClient(client *redis.Client) *SubClient {
 }
 
 // Subscribe makes a Redis "SUBSCRIBE" command on the provided channels
-func (c *SubClient) Subscribe(channels ...interface{}) *SubResp {
-	return c.filterMessages("SUBSCRIBE", channels...)
+func (c *SubClient) Subscribe(channels ...interface{}) error {
+	return c.Client.SendCmd("SUBSCRIBE", channels...)
 }
 
 // PSubscribe makes a Redis "PSUBSCRIBE" command on the provided patterns
-func (c *SubClient) PSubscribe(patterns ...interface{}) *SubResp {
-	return c.filterMessages("PSUBSCRIBE", patterns...)
+func (c *SubClient) PSubscribe(patterns ...interface{}) error {
+	return c.Client.SendCmd("PSUBSCRIBE", patterns...)
 }
 
 // Unsubscribe makes a Redis "UNSUBSCRIBE" command on the provided channels
-func (c *SubClient) Unsubscribe(channels ...interface{}) *SubResp {
-	return c.filterMessages("UNSUBSCRIBE", channels...)
+func (c *SubClient) Unsubscribe(channels ...interface{}) error {
+	return c.Client.SendCmd("UNSUBSCRIBE", channels...)
 }
 
 // PUnsubscribe makes a Redis "PUNSUBSCRIBE" command on the provided patterns
-func (c *SubClient) PUnsubscribe(patterns ...interface{}) *SubResp {
-	return c.filterMessages("PUNSUBSCRIBE", patterns...)
+func (c *SubClient) PUnsubscribe(patterns ...interface{}) error {
+	return c.Client.SendCmd("PUNSUBSCRIBE", patterns...)
 }
 
 // Receive returns the next publish resp on the Redis client. It is possible
@@ -89,24 +89,6 @@ func (c *SubClient) receive(skipBuffer bool) *SubResp {
 	}
 	r := c.Client.ReadResp()
 	return c.parseResp(r)
-}
-
-func (c *SubClient) filterMessages(cmd string, names ...interface{}) *SubResp {
-	r := c.Client.Cmd(cmd, names...)
-	var sr *SubResp
-	for i := 0; i < len(names); i++ {
-		// If nil we know this is the first loop
-		if sr == nil {
-			sr = c.parseResp(r)
-		} else {
-			sr = c.receive(true)
-		}
-		if sr.Type == Message {
-			c.messages.PushBack(sr)
-			i--
-		}
-	}
-	return sr
 }
 
 func (c *SubClient) parseResp(resp *redis.Resp) *SubResp {
@@ -144,16 +126,26 @@ func (c *SubClient) parseResp(resp *redis.Resp) *SubResp {
 	switch rtype {
 	case "subscribe", "psubscribe":
 		sr.Type = Subscribe
-		count, err := elems[2].Int()
-		if err != nil {
+		channel, channelErr := elems[1].Str()
+		if channelErr != nil {
+			sr.Err = fmt.Errorf("subscribe channel: %s", channelErr)
+			sr.Type = Error
+			return sr
+		} else {
+			sr.Channel = channel
+		}
+		count, countErr := elems[2].Int()
+		if countErr != nil {
 			sr.Err = fmt.Errorf("subscribe count: %s", err)
 			sr.Type = Error
+			return sr
 		} else {
 			sr.SubCount = int(count)
 		}
 
 	case "unsubscribe", "punsubscribe":
 		sr.Type = Unsubscribe
+		sr.Channel = elems[1].String()
 		count, err := elems[2].Int()
 		if err != nil {
 			sr.Err = fmt.Errorf("unsubscribe count: %s", err)
